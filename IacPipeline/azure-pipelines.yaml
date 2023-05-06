@@ -1,0 +1,78 @@
+# Name of the pipeline
+name: Terraform CI/CD
+
+# Trigger the pipeline on any push to the main branch
+trigger:
+  branches:
+    include:
+    - main
+
+# Specify the agent pool to run the pipeline
+pool:
+  vmImage: 'ubuntu-latest'
+
+# Define the stages in the pipeline
+stages:
+- stage: Validate
+  displayName: Validate Terraform
+  jobs:
+  - job: Validate
+    displayName: Validate Terraform
+    steps:
+    - checkout: self
+    - task: HashiCorpTerraformInstaller@0
+      inputs:
+        terraformVersion: 1.0.0
+    - task: TerraformTaskV1@0
+      inputs:
+        command: 'validate'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/path/to/terraform/code'
+
+- stage: Scan
+  displayName: Scan Terraform
+  dependsOn: Validate
+  jobs:
+  - job: Scan
+    displayName: Scan Terraform
+    steps:
+    - checkout: self
+    - task: StelligentCfnNagAction@2
+      inputs:
+        failOnWarnings: true
+        awsRegion: 'us-east-1'
+        awsRoleArn: '$(AWS_ROLE_ARN)'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/path/to/terraform/code'
+
+- stage: Deploy
+  displayName: Deploy Terraform
+  dependsOn: Scan
+  jobs:
+  - job: Deploy
+    displayName: Deploy Terraform
+    steps:
+    - checkout: self
+    - task: HashiCorpTerraformInstaller@0
+      inputs:
+        terraformVersion: 1.0.0
+    - task: TerraformTaskV1@0
+      inputs:
+        command: 'init'
+        backendServiceArm: '$(BACKEND_SERVICE_ARM)'
+        backendAzureRmResourceGroupName: '$(BACKEND_RESOURCE_GROUP_NAME)'
+        backendAzureRmStorageAccountName: '$(BACKEND_STORAGE_ACCOUNT_NAME)'
+        backendAzureRmContainerName: '$(BACKEND_CONTAINER_NAME)'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/path/to/terraform/code'
+    - task: TerraformTaskV1@0
+      inputs:
+        command: 'plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/path/to/terraform/code'
+    - task: TerraformTaskV1@0
+      inputs:
+        command: 'apply'
+        autoApprove: true
+        workingDirectory: '$(System.DefaultWorkingDirectory)/path/to/terraform/code'
+        environmentVariables:
+          ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+          ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+          ARM_TENANT_ID: $(ARM_TENANT_ID)
+          ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
